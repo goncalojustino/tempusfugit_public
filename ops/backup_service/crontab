@@ -1,0 +1,1 @@
+34 2 * * * /usr/local/bin/backup.sh

@@ -1,0 +1,11 @@
+{
+  "name": "tempusfugit-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "pg": "^8.12.0"
+  }
+}
+

@@ -1,0 +1,26 @@
+:80 {
+  encode gzip zstd
+
+  handle_path /api/* {
+    reverse_proxy api:4000
+  }
+
+  handle {
+    root * /site
+    try_files {path} /index.html
+    file_server
+  }
+}
+
+# Backup console on 8081
+:8081 {
+  encode gzip zstd
+
+  handle_path /api/* {
+    reverse_proxy api:4000
+  }
+
+  handle {
+    reverse_proxy console:8081
+  }
+}

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <title>Backup Console</title>
+  <style>
+    :root {
+      --bg: #010409;
+      --panel: rgba(10, 25, 47, 0.8);
+      --border: #0d4a7f;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --danger: #f85149;
+      --ok: #3fb950;
+      --glow: rgba(88, 166, 255, 0.4);
+      --glow-danger: rgba(248, 81, 73, 0.5);
+    }
+    * { box-sizing: border-box }
+    body { font-family: 'Share Tech Mono', monospace; margin: 0; background: var(--bg) radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%); background-attachment: fixed; color: var(--text); }
+    header { font-family: 'Orbitron', sans-serif; padding: 14px 24px; border-bottom: 1px solid var(--border); font-weight: 700; display:flex; align-items:center; gap:12px; background: rgba(0,0,0,0.3); text-shadow: 0 0 5px var(--glow); letter-spacing: 0.1em; text-transform: uppercase; }
+    header .spacer { flex:1 }
+    header a { color: var(--accent); text-decoration:none }
+    header a:hover { text-decoration:underline }
+    main { padding: 24px; display: grid; gap: 16px; }
+    main.center { min-height: calc(100vh - 52px); place-items: center; }
+    .card { background: var(--panel); padding: 16px; border: 1px solid var(--border); border-radius: 4px; max-width: 1000px; box-shadow: 0 0 15px -5px var(--glow); backdrop-filter: blur(4px); }
+    .input { font-family: 'Share Tech Mono', monospace; padding: 10px 12px; background: rgba(0,0,0,0.3); color: var(--text); border: 1px solid var(--border); border-radius: 4px; width: 100%; }
+    .btn { font-family: 'Orbitron', sans-serif; padding: 8px 14px; border: 1px solid var(--accent); border-radius: 4px; background: transparent; color: var(--accent); cursor: pointer; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; text-shadow: 0 0 5px var(--glow); }
+    .btn:hover:not(:disabled) { background: var(--accent); color: var(--bg); box-shadow: 0 0 10px var(--glow); }
+    .btn.secondary { border-color: var(--border); color: var(--muted); text-shadow: none; }
+    .btn.secondary:hover:not(:disabled) { color: var(--text); border-color: var(--accent); background: transparent; box-shadow: 0 0 10px var(--glow); }
+    .btn.danger { border-color: var(--danger); color: var(--danger); text-shadow: 0 0 5px var(--glow-danger); }
+    .btn.danger:hover:not(:disabled) { background: var(--danger); color: var(--bg); box-shadow: 0 0 10px var(--glow-danger); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .muted { color: var(--muted); }
+    pre { font-family: 'Share Tech Mono', monospace; background: rgba(0,0,0,0.3); padding: 12px; border: 1px solid var(--border); border-radius: 4px; max-height: 320px; overflow: auto; color: #c9d1d9; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--border); padding: 10px; text-align: left; font-size: 14px }
+    tr:hover { background: rgba(88, 166, 255, 0.1); }
+    th { font-family: 'Orbitron', sans-serif; color: var(--muted); font-weight: 700; cursor: pointer; user-select: none; letter-spacing: 0.05em; }
+    th .arrow { opacity: 0.7; margin-left: 4px; font-size: 12px }
+    .row { display: flex; gap: 10px; align-items: center }
+    .grid { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center }
+    .pill { display:inline-block; padding:2px 8px; border-radius:4px; background:rgba(0,0,0,0.2); border:1px solid var(--border); color:var(--muted); font-size:12px }
+    h3, h4 {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-shadow: 0 0 5px var(--glow);
+    }
+  </style>
+  <script>
+    const API_BASE = '/api';
+
+    let token = ''
+    function setMsg(t){ document.getElementById('msg').textContent = t || '' }
+    function setOut(t){ document.getElementById('out').textContent = t || '' }
+    function show(id){
+      const main = document.querySelector('main');
+      if (id === 'login') {
+        document.getElementById('login').style.display = 'block';
+        document.getElementById('app').style.display = 'none';
+        main.classList.add('center');
+      } else {
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        main.classList.remove('center');
+      }
+    }
+
+    async function downloadBackup(type, name){
+      if(!type || !name){
+        setMsg('Missing filename');
+        return;
+      }
+      setMsg('Preparing download…');
+      try{
+        const url = `/backup/download?type=${encodeURIComponent(type)}&file=${encodeURIComponent(name)}`;
+        const res = await fetch(url, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if(!res.ok){
+          let detail = `Download failed (${res.status})`;
+          try{
+            const body = await res.json();
+            if(body && body.error) detail = body.error;
+          }catch(_){
+            const text = await res.text();
+            if(text) detail = text;
+          }
+          throw new Error(detail);
+        }
+        const blob = await res.blob();
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(href);
+        setMsg('Download started');
+      }catch(err){
+        setMsg(String(err.message || err));
+      }
+    }
+
+    async function login(ev){
+      ev.preventDefault(); setMsg('Logging in…')
+      const email = document.getElementById('email').value.trim().toLowerCase()
+      const pass = document.getElementById('pass').value
+      try{
+        const r = await fetch(API_BASE + '/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, passcode: pass }) })
+        const j = await r.json()
+        if(!r.ok){ setMsg(j.error||'Login failed'); return }
+        token = j.token
+        setMsg('Logged in.')
+        show('app')
+        await refreshBackups()
+      }catch(e){ setMsg('ERROR') }
+    }
+
+    async function backupNow(){
+      setMsg('Running backup…'); setOut('')
+      try{
+        const r = await fetch('/backup/now', { method:'POST', headers:{ 'Authorization':'Bearer '+token } })
+        const j = await r.json()
+        if(!r.ok){ setMsg('Backup failed'); setOut((j.stderr||'') + '\n' + (j.stdout||'')); return }
+        setMsg('Backup completed');
+        setOut(j.stdout)
+        await refreshBackups()
+      }catch{ setMsg('ERROR') }
+    }
+
+    async function refreshBackups(){
+      try{
+        const r = await fetch('/backups', { headers: { 'Authorization':'Bearer '+token } })
+        const j = await r.json()
+        setLatestLinks(j)
+        renderTable('code', j.code||[])
+        renderTable('db',   j.db  ||[])
+        setNextBackupInfo(j.schedule)
+      }catch(e){ setMsg('Failed to load backups') }
+    }
+
+    const sortState = { code: { by: 'mtime', asc: false }, db: { by: 'mtime', asc: false } }
+    function fmtSize(n){ const s=['B','KB','MB','GB']; let i=0; let x=n; while(x>1024 && i<s.length-1){ x/=1024; i++ } return (Math.round(x*10)/10)+' '+s[i] }
+    function renderTable(type, items){
+      const table = document.getElementById('backups-' + type)
+      const thead = table.querySelector('thead')
+      const tbody = table.querySelector('tbody')
+      const st = sortState[type]
+      const keyFn = (row)=> (st.by==='name'? row.name : (st.by==='size'? row.size : row.mtime))
+      const sorted = items.slice().sort((a,b)=>{
+        let va = keyFn(a), vb = keyFn(b)
+        if (st.by==='mtime'){ va = new Date(va).getTime(); vb = new Date(vb).getTime() }
+        if (va<vb) return st.asc? -1 : 1
+        if (va>vb) return st.asc? 1 : -1
+        return 0
+      })
+      thead.innerHTML = ''
+      const hr = document.createElement('tr')
+      const cols = [
+        { key:'name', label:'File' },
+        { key:'size', label:'Size' },
+        { key:'mtime', label:'Modified' },
+        { key:'actions', label:'Actions', noSort:true },
+      ]
+      cols.forEach(c=>{
+        const th = document.createElement('th')
+        th.textContent = c.label
+        if(!c.noSort){
+          const span = document.createElement('span'); span.className='arrow'; span.textContent = (st.by===c.key? (st.asc?'▲':'▼') : '')
+          th.appendChild(span)
+          th.onclick = ()=>{ if(st.by===c.key) st.asc=!st.asc; else { st.by=c.key; st.asc = (c.key!=='mtime') } ; renderTable(type, items) }
+        }
+        hr.appendChild(th)
+      })
+      thead.appendChild(hr)
+      tbody.innerHTML = ''
+      for(const item of sorted){
+        const tr = document.createElement('tr')
+        tr.innerHTML = `<td>${item.name}</td><td>${fmtSize(item.size)}</td><td>${new Date(item.mtime).toLocaleString()}</td><td class=\"row\"></td>`
+        const actions = tr.lastChild
+        const dl = document.createElement('button'); dl.className='btn secondary'; dl.textContent='Download'; dl.onclick = ()=> downloadBackup(type, item.name); actions.appendChild(dl)
+        const del = document.createElement('button'); del.className='btn danger'; del.textContent='Delete'; del.onclick = ()=> deleteBackup(type, item.name); actions.appendChild(del)
+        tbody.appendChild(tr)
+      }
+    }
+
+    function setNextBackupInfo(schedule) {
+      const container = document.getElementById('next-backup-container');
+      const el = document.getElementById('next-backup-info');
+      if (!schedule || !container || !el) {
+        if(container) container.style.display = 'none';
+        return;
+      }
+      container.style.display = 'block';
+
+      // Very basic cron parser for daily schedules like "0 4 * * *"
+      const parts = schedule.split(' ');
+      if (parts.length === 5 && parts[2] === '*' && parts[3] === '*' && parts[4] === '*') {
+        const minute = parseInt(parts[0], 10);
+        const hour = parseInt(parts[1], 10);
+
+        if (!isNaN(minute) && !isNaN(hour)) {
+          const now = new Date();
+          let nextBackup = new Date();
+          nextBackup.setHours(hour, minute, 0, 0);
+
+          if (now >= nextBackup) {
+            nextBackup.setDate(nextBackup.getDate() + 1);
+          }
+          el.textContent = `Next automatic backup: ${nextBackup.toLocaleString()}`;
+          return;
+        }
+      }
+      el.textContent = `Next automatic backup schedule: ${schedule}`;
+    }
+
+    function setLatestLinks(list){
+      const lc = document.getElementById('latest-code')
+      const ld = document.getElementById('latest-db')
+      if(list && Array.isArray(list.code) && list.code.length){
+        const f = list.code[0].name
+        lc.onclick = () => downloadBackup('code', f)
+        lc.textContent = f
+        lc.style.display = 'inline-block'
+      } else { lc.style.display = 'none' }
+      if(list && Array.isArray(list.db) && list.db.length){
+        const f = list.db[0].name
+        ld.onclick = () => downloadBackup('db', f)
+        ld.textContent = f
+        ld.style.display = 'inline-block'
+      } else { ld.style.display = 'none' }
+      document.getElementById('latest-wrap').style.display = (lc.style.display==='inline-block' || ld.style.display==='inline-block') ? 'inline-flex' : 'none'
+    }
+
+    async function deleteBackup(type, name){
+      if(!confirm(`Delete ${type} backup\n${name}?`)) return
+      setMsg('Deleting…')
+      try{
+        const r = await fetch('/backup/delete', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token }, body: JSON.stringify({ type, file: name }) })
+        const j = await r.json()
+        if(!r.ok){ setMsg(j.error||'Delete failed'); return }
+        setMsg('Deleted')
+        await refreshBackups()
+      }catch{ setMsg('ERROR') }
+    }
+
+    window.addEventListener('DOMContentLoaded', ()=>{
+      show('login')
+    })
+  </script>
+  </head>
+  <body>
+    <header>
+      <div>Backup Console</div>
+      <div class="spacer"></div>
+      <div id="latest-wrap" class="row" style="display:none; align-items:center;">
+        <span class="muted">Latest:</span>
+        <button id="latest-code" class="btn secondary" style="display:none; padding: 4px 8px; margin: 0 8px;"></button>
+        <span class="muted" style="margin: 0 4px;">·</span>
+        <button id="latest-db" class="btn secondary" style="display:none; padding: 4px 8px; margin: 0 8px;"></button>
+      </div>
+    </header>
+    <main>
+      <div id="login" class="card" style="display:none">
+        <form onsubmit="login(event)" style="display:grid; gap:12px; max-width:420px">
+          <div class="grid">
+            <label>Email</label>
+            <input id="email" class="input" type="email" required />
+            <label>Passcode</label>
+            <input id="pass" class="input" type="password" required />
+          </div>
+          <div class="row" style="justify-content:flex-end">
+            <span id="msg" class="muted" style="flex:1"></span>
+            <button class="btn">Login</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="app" class="card" style="display:none">
+        <div class="row" style="margin-bottom:12px">
+          <button class="btn" onclick="backupNow()">Backup now</button>
+          <span id="msg" class="muted" style="flex:1"></span>
+        </div>
+        <div id="next-backup-container" style="margin-bottom: 24px; display: none;">
+          <span id="next-backup-info" class="muted"></span>
+        </div>
+        <div class="card" style="background: #0b1021; margin-bottom: 24px;">
+          <h3 style="margin-top:0; font-size: 16px;">How to Restore Manually</h3>
+          <p class="muted" style="margin-top:0; margin-bottom:16px;">
+            Restoring is a manual process performed from your terminal. Download the desired backup file first.
+            These commands assume you are in the project's root directory.
+          </p>
+          <h4>Database Restore</h4>
+          <p class="muted" style="margin-top:0; margin-bottom:8px;">
+            This command will overwrite the current database. This action is destructive and irreversible.
+            This should only be performed by a DANTE-level administrator.
+          </p>
+          <pre><code>docker compose exec console pg_restore -h db -U tempus -d tempus -c --if-exists -1 /backups/db/BACKUP_FILENAME.dump</code></pre>
+          
+          <h4 style="margin-top:16px;">Code Restore</h4>
+          <p class="muted" style="margin-top:0; margin-bottom:8px;">
+            This will overwrite your current source code files with the content of the backup. Make sure you have no uncommitted changes.
+          </p>
+          <pre><code># 1. Stop all services
+docker compose down
+
+# 2. Extract the backup archive in your project root
+tar -xzf /path/to/your/downloaded/tempus_code_...tar.gz
+
+# 3. Rebuild and restart services
+docker compose up -d --build</code></pre>
+        </div>
+        <h3 style="margin-top:0; margin-bottom:12px;">Code Backups</h3>
+        <table id="backups-code"><thead></thead><tbody></tbody></table>
+        <h3 style="margin-top:24px; margin-bottom:12px;">Database Backups</h3>
+        <table id="backups-db"><thead></thead><tbody></tbody></table>
+        <div style="margin-top:12px">
+          <div class="muted" style="margin-bottom:6px">Logs</div>
+          <pre id="out"></pre>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

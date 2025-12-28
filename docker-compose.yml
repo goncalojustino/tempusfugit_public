@@ -1,0 +1,135 @@
+services:
+  db:
+    image: postgres:16
+    container_name: tempus_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tempus
+      #POSTGRES_PASSWORD: change_db_pass
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: tempus
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tempus -d tempus || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+
+  api:
+    build:
+      context: ./api
+    container_name: tempus_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      ALLOWED_ORIGINS: "<CHANGE:your_allowed_origins_here>"
+      PUBLIC_URL: "<CHANGE:your_public_url_here>"
+      NOTIFY_ENABLED: "1"
+      ADMIN_EMAILS: "<CHANGE:your_admin_emails_here>"
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      FROM_EMAIL: ${FROM_EMAIL}
+    expose:
+      - "4000"
+    volumes:
+      - ./CHANGES.txt:/opt/tempusfugit/CHANGES.txt:ro
+    # If you really need to hit API directly from host, uncomment:
+    # ports:
+    #   - "4000:4000"
+
+  webbuild:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    container_name: tempus_webbuild
+    command: ["sh","-lc","rm -rf /out/* && cp -r /site/* /out/ && ls -lah /out"]
+    volumes:
+      - web_dist:/out
+
+  caddy:
+    image: caddy:2
+    container_name: tempus_caddy
+    restart: unless-stopped
+    ports:
+     - "80:80"
+     - "443:443"
+     - "8081:8081"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - web_dist:/site:ro    # Caddy serves built SPA from here
+    depends_on:
+      - api
+      - webbuild
+
+  backup:
+    build:
+      context: ./ops/backup_service
+    container_name: tempus_backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: tempus
+      DB_NAME: tempus
+      PGPASSWORD: ${PGPASSWORD}
+      TZ: Europe/Lisbon
+      CODE_SRC: /opt/tempusfugit
+    volumes:
+      - ./:/opt/tempusfugit:ro
+      - /opt/tf-bak:/backups
+
+  console:
+    build:
+      context: ./ops
+      dockerfile: console_service/Dockerfile
+    container_name: tempus_console
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 8081
+      SESSION_SECRET: ${SESSION_SECRET}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: tempus
+      DB_NAME: tempus
+      PGPASSWORD: ${PGPASSWORD}
+      BACKUP_ROOT: /backups
+      CODE_SRC: /opt/tempusfugit
+      TZ: Europe/Lisbon
+      BACKUP_SCHEDULE: "34 2 * * *"   # daily at 02:34
+    volumes:
+      - ./:/opt/tempusfugit:ro
+      - /opt/tf-bak:/backups
+
+  adminer:
+    image: adminer
+    container_name: tempus_adminer
+    restart: unless-stopped
+    environment:
+      - ADMINER_DEFAULT_SERVER=db
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+
+volumes:
+  db_data:
+  web_dist:
