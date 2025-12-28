@@ -43,3 +43,14 @@ Tempusfugit is a Dockerized reservation + operations platform built for managing
 
 ## License
 Tempusfugit is released under the MIT License. See `LICENSE` for the full text and attribution requirements.
+
+## Citation
+If you use this tool, please cite it as:
+
+G. Justino, *TempusFugit*, Zenodo (2025).  
+https://doi.org/10.5281/zenodo.18076982
+
+
+
+[![DOI](https://zenodo.org/badge/1124224154.svg)](https://doi.org/10.5281/zenodo.18076982)
+
